@@ -64,10 +64,10 @@ string(SUBSTRING ${C_STANDARD_LATEST} 6 2 C_STANDARD_LATEST_ID)
 set(CMAKE_C_STANDARD ${C_STANDARD_LATEST_ID})
 
 ## enable compiler's support for c++ modules
-if(CLANG OR APPLECLANG)
-    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ClangC++20Modules.cmake)
-elseif(MSVC)
+if(MSVC) # include clang-cl
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/MSVCC++20Modules.cmake)
+elseif(CLANG OR APPLECLANG)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ClangC++20Modules.cmake)
 endif()
 
 ## avoid using default XCode C++ SDK (which corresponds to `AppleClang`)

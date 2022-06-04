@@ -1,3 +1,6 @@
+if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
+    message(FATAL_ERROR "Modules are not yet support by clang-cl.exe")
+endif()
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("/experimental:module" COMPILER_SUPPORTS_MODULES)
 if(COMPILER_SUPPORTS_MODULES)
@@ -21,7 +24,6 @@ function(check_accepted_module_interface var src)
 endfunction()
 
 function(add_module name)
-
     set(STDIFC_BASE_DIR
             "${CMAKE_CXX_COMPILER}/../../../../ifc/x64")
     cmake_path(ABSOLUTE_PATH STDIFC_BASE_DIR NORMALIZE)
