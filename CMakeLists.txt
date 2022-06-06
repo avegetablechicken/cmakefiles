@@ -41,7 +41,11 @@ endif()
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
     set(GNUC TRUE)
 elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang")
-    set(CLANG TRUE)
+    if(MSVC)
+        set(CLANG_CL TRUE)
+    else()
+        set(CLANG TRUE)
+    endif()
 elseif(${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang")
     set(APPLECLANG TRUE)
 endif()
@@ -64,13 +68,17 @@ string(SUBSTRING ${C_STANDARD_LATEST} 6 2 C_STANDARD_LATEST_ID)
 set(CMAKE_C_STANDARD ${C_STANDARD_LATEST_ID})
 
 ## enable compiler's support for c++ modules
-if(MSVC) # include clang-cl
+if(GNUC)
+    set(COMPILER_SUPPORTS_MODULES TRUE)
+elseif(MSVC) # include clang-cl
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/MSVCC++20Modules.cmake)
+    check_cxx_compiler_modules(COMPILER_SUPPORTS_MODULES)
 elseif(CLANG OR APPLECLANG)
     include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/ClangC++20Modules.cmake)
+    check_cxx_compiler_modules(COMPILER_SUPPORTS_MODULES)
 endif()
 
-## avoid using default XCode C++ SDK (which corresponds to `AppleClang`)
+## avoid using built-in sdk of Apple (which corresponds to AppleClang)
 if(APPLE AND CLANG)
     get_filename_component(LLVM_BINDIR ${CMAKE_CXX_COMPILER} DIRECTORY)
     get_filename_component(LLVM_HOME ${LLVM_BINDIR} DIRECTORY)
@@ -81,6 +89,10 @@ if(APPLE AND CLANG)
             ${STDLIB_LDFLAGS} ${CMAKE_MODULE_LINKER_FLAGS})
     set(CMAKE_SHARED_LINKER_FLAGS
             ${STDLIB_LDFLAGS} ${CMAKE_SHARED_LINKER_FLAGS})
+endif()
+
+if(CLANG_CL)
+    add_compile_options(/EHsc)
 endif()
 
 set(THIRD_PARTY_DIR ${PROJECT_SOURCE_DIR}/external)
@@ -138,35 +150,38 @@ endif()
 add_executable(tester main.cpp)
 
 # link modules
-set(MODULE_SRCS_HELLO
-#        test/modules/hello/src/hello.mpp)
-        test/modules/impl_unit/src/hello.mpp
-        test/modules/impl_unit/src/hello_impl.cpp)
-set(MODULE_SRCS_FOO
-        test/modules/dependence2/src/zoo.mpp
-        test/modules/dependence2/src/cat.mpp
-        test/modules/dependence2/src/bar.mpp
-        test/modules/dependence2/src/foo.mpp)
-set(MODULE_SRCS_MATH
-        test/modules/partitions/src/math.math1.mpp
-        test/modules/partitions/src/math.math2.mpp
-        test/modules/partitions/src/math.mpp)
-set(MODULE_SRCS_MATH_FRAGMENTS
-        test/modules/partitions/src/math.math1.mpp
-        test/modules/partitions/src/math.math2.mpp)
+if(COMPILER_SUPPORTS_MODULES)
+    set(MODULE_SRCS_HELLO test/modules/hello/src/hello.mpp)
+    set(MODULE_SRCS_FOO
+            test/modules/dependence2/src/zoo.mpp
+            test/modules/dependence2/src/cat.mpp
+            test/modules/dependence2/src/bar.mpp
+            test/modules/dependence2/src/foo.mpp)
+    set(MODULE_SRCS_MATH
+            test/modules/partitions/src/math.math1.mpp
+            test/modules/partitions/src/math.math2.mpp
+            test/modules/partitions/src/math.mpp)
+    set(MODULE_SRCS_MATH_FRAGMENTS
+            test/modules/partitions/src/math.math1.mpp
+            test/modules/partitions/src/math.math2.mpp)
 
-if(GNUC)
-    get_target_property(all_srcs tester SOURCES)
-    list(PREPEND all_srcs
-            ${MODULE_SRCS_HELLO} ${MODULE_SRCS_FOO} ${MODULE_SRCS_MATH})
-    set_target_properties(tester PROPERTIES SOURCES "${all_srcs}")
-    target_compile_options(tester PRIVATE -fmodules-ts -x c++)
-elseif(MSVC OR CLANG OR APPLECLANG)
-    add_module(hello ${MODULE_SRCS_HELLO})
-    add_module(foo ${MODULE_SRCS_FOO})
-#    add_module(math ${MODULE_SRCS_MATH}
-#            FRAGMENTS ${MODULE_SRCS_MATH_FRAGMENTS})
-    target_link_module(tester hello foo)
+    if(GNUC)
+        get_target_property(all_srcs tester SOURCES)
+        list(PREPEND all_srcs
+                ${MODULE_SRCS_HELLO} ${MODULE_SRCS_FOO} ${MODULE_SRCS_MATH})
+        set_target_properties(tester PROPERTIES SOURCES "${all_srcs}")
+        target_compile_options(tester PRIVATE -fmodules-ts -x c++)
+    elseif(MSVC)
+        add_module(hello ${MODULE_SRCS_HELLO})
+        add_module(foo ${MODULE_SRCS_FOO})
+        add_module(math ${MODULE_SRCS_MATH}
+                FRAGMENTS ${MODULE_SRCS_MATH_FRAGMENTS})
+        target_link_module(tester hello foo math)
+    elseif(CLANG OR APPLECLANG)
+        add_module(hello ${MODULE_SRCS_HELLO})
+        add_module(foo ${MODULE_SRCS_FOO})
+        target_link_module(tester hello foo)
+    endif()
 endif()
 
 # link libraries

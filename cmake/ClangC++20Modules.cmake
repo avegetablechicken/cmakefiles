@@ -1,15 +1,33 @@
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-fmodules-ts" COMPILER_TEST_MODULES_TS)
-if(COMPILER_TEST_MODULES_TS)
-    set(MODULE_FLAG "-fmodules-ts")
-else()
-    check_cxx_compiler_flag("-fmodules" COMPILER_TEST_MODULES)
-    if(COMPILER_TEST_MODULES)
-        set(MODULE_FLAG "-fmodules")
+function(check_cxx_compiler_modules RESULT)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-fmodules-ts" COMPILER_TEST_MODULES_TS)
+    if(COMPILER_TEST_MODULES_TS)
+        set(${RESULT} TRUE PARENT_SCOPE)
     else()
-        message(FATAL_ERROR "Modules are not yet support by current version")
+        check_cxx_compiler_flag("-fmodules" COMPILER_TEST_MODULES)
+        if(COMPILER_TEST_MODULES)
+            set(${RESULT} TRUE PARENT_SCOPE)
+        else()
+            message(STATUS "Modules are not yet support by current version")
+            set(${RESULT} FALSE PARENT_SCOPE)
+        endif()
     endif()
-endif()
+endfunction()
+
+function(get_module_compile_flag MODULE_FLAG)
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-fmodules-ts" COMPILER_TEST_MODULES_TS)
+    if(COMPILER_TEST_MODULES_TS)
+        set(${MODULE_FLAG} "-fmodules-ts" PARENT_SCOPE)
+    else()
+        check_cxx_compiler_flag("-fmodules" COMPILER_TEST_MODULES)
+        if(COMPILER_TEST_MODULES)
+            set(${MODULE_FLAG} "-fmodules" PARENT_SCOPE)
+        else()
+            message(FATAL_ERROR "Modules are not yet support by current version")
+        endif()
+    endif()
+endfunction()
 
 set(PREBUILT_MODULE_PATH ${CMAKE_BINARY_DIR}/pcm.cache)
 if(NOT DEFINED MODULE_INTERFACE_EXTENSION)
@@ -32,18 +50,7 @@ function(add_module name)
                 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk)
     endif()
 
-    if(${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang"
-            AND ${CMAKE_CXX_COMPILER_VERSION} VERSION_GREATER_EQUAL 13
-            AND ${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 14)
-        # c++2b doesn't support `-fprebuilt-module-path` in clang-13
-        set(CXX_STANDARD_OPTION c++2a)
-    else()
-        if(cxx_std_23 IN_LIST CMAKE_CXX_COMPILE_FEATURES)
-            set(CXX_STANDARD_OPTION c++2b)
-        else()
-            set(CXX_STANDARD_OPTION c++2a)
-        endif()
-    endif()
+    get_module_compile_flag(MODULE_FLAG)
 
     set(SRCS "")
     foreach(src ${ARGN})
@@ -54,6 +61,7 @@ function(add_module name)
         cmake_path(ABSOLUTE_PATH src)
         list(APPEND SRCS ${src})
     endforeach()
+    file(MAKE_DIRECTORY ${PREBUILT_MODULE_PATH})
 
     set(MODULE_OBJECT_OUTPUT_DIR ${CMAKE_BINARY_DIR}/CMakeFiles/${name}.dir)
     set(MODULE_PCM_FILES "")
@@ -69,9 +77,6 @@ function(add_module name)
                     OUTPUT ${CUR_MODULE_PRECOMPILE}
                     DEPENDS ${src} ${MODULE_PCM_FILES}
                     COMMAND
-                    test -d ${PREBUILT_MODULE_PATH}
-                    || mkdir -p ${PREBUILT_MODULE_PATH}
-                    COMMAND
                     ${CMAKE_CXX_COMPILER}
                     ${ISYSROOT}
                     ${MODULE_FLAG}
@@ -81,7 +86,7 @@ function(add_module name)
                     -fprebuilt-module-path=${PREBUILT_MODULE_PATH}
                     --precompile
                     -x c++-module
-                    -std=${CXX_STANDARD_OPTION}
+                    -std=c++2b
                     -c -o ${CUR_MODULE_PRECOMPILE}
                     ${src})
             list(APPEND MODULE_PCM_FILES ${CUR_MODULE_PRECOMPILE})
@@ -108,9 +113,6 @@ function(add_module name)
                 OUTPUT ${CUR_MODULE_OBJECT}
                 DEPENDS ${INPUT_FILE} ${MODULE_PCM_FILES}
                 COMMAND
-                test -d ${MODULE_OBJECT_OUTPUT_DIR}
-                || mkdir -p ${MODULE_OBJECT_OUTPUT_DIR}
-                COMMAND
                 ${CMAKE_CXX_COMPILER}
                 ${ISYSROOT}
                 ${MODULE_FLAG}
@@ -119,10 +121,10 @@ function(add_module name)
                 #-fmodules-cache-path=${PREBUILT_MODULE_PATH}
                 ${MODULE_FILE_FLAGS}
                 -fprebuilt-module-path=${PREBUILT_MODULE_PATH}
-                -std=${CXX_STANDARD_OPTION}
+                -std=c++2b
                 -c -o ${CUR_MODULE_OBJECT}
                 ${INPUT_FILE}
-                )
+        )
         list(APPEND MODULE_OBJ_FILES ${CUR_MODULE_OBJECT})
 
     endforeach()
@@ -140,16 +142,8 @@ endfunction()
 function(target_link_module target)
     set_target_properties(${target} PROPERTIES
             CXX_EXTENSIONS OFF)
-    get_target_property(cxx_standard ${target} CXX_STANDARD)
-    if(${cxx_standard} GREATER 20)
-        if(${CMAKE_CXX_COMPILER_ID} STREQUAL "AppleClang"
-                AND ${CMAKE_CXX_COMPILER_VERSION} VERSION_GREATER_EQUAL 13
-                AND ${CMAKE_CXX_COMPILER_VERSION} VERSION_LESS 14)
-            set_target_properties(${target} PROPERTIES
-                    CXX_STANDARD 20) # disable c++2b in clang-13
-        endif()
-    endif()
 
+    get_module_compile_flag(MODULE_FLAG)
     target_compile_options(${target} PRIVATE
             ${MODULE_FLAG}
             -fprebuilt-module-path=${PREBUILT_MODULE_PATH})
