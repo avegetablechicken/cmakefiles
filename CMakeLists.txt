@@ -6,7 +6,7 @@ option(USE_PKGCFG ON "")
 option(USE_VCPKG OFF "")
 
 if(USE_VCPKG)
-    if(WIN32) # TODO: shadow WSL
+    if(WIN32)
         set(VCPKG_TARGET_TRIPLET "x64-windows" CACHE STRING "" FORCE)
     elseif(APPLE)
         set(VCPKG_TARGET_TRIPLET "x64-osx-dynamic" CACHE STRING "" FORCE)
