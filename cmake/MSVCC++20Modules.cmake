@@ -6,7 +6,7 @@ function(check_cxx_compiler_modules RESULT)
     endif()
     include(CheckCXXCompilerFlag)
     check_cxx_compiler_flag("/experimental:module" COMPILER_SUPPORTS_MODULES)
-    if(COMPILER_SUPPORTS_MODULES)
+    if(${COMPILER_SUPPORTS_MODULES})
         set(${RESULT} TRUE PARENT_SCOPE)
     else()
         message(STATUS "Modules are not yet support by current version")
@@ -17,7 +17,7 @@ endfunction()
 function(get_module_compile_flag MODULE_FLAG)
     include(CheckCXXCompilerFlag)
     check_cxx_compiler_flag("/experimental:module" COMPILER_SUPPORTS_MODULES)
-    if(COMPILER_SUPPORTS_MODULES)
+    if(${COMPILER_SUPPORTS_MODULES})
         set(${MODULE_FLAG} "/experimental:module" PARENT_SCOPE)
     else()
         message(FATAL "Modules are not yet support by current version")
@@ -76,19 +76,18 @@ function(add_module name)
     set(MODULE_FRAGMENT_REFERENCES "")
 
     foreach(src ${SRCS})
-        get_filename_component(SRC_STEM ${src} NAME_WLE)
         check_accepted_module_interface(IS_MODULE_INTERFACE ${src})
-
         if(IS_MODULE_INTERFACE)
+            get_filename_component(SRC_STEM ${src} NAME_WLE)
             if(FRAGMENT_SRCS AND ${src} IN_LIST FRAGMENT_SRCS)
                 string(REPLACE "." "-" fragment_file_stem ${SRC_STEM})
                 set(CUR_MODULE_PRECOMPILE ${PREBUILT_MODULE_PATH}/${fragment_file_stem}.ifc)
             else()
                 set(CUR_MODULE_PRECOMPILE ${PREBUILT_MODULE_PATH}/${SRC_STEM}.ifc)
             endif()
-
             get_filename_component(SRC_FILENAME ${src} NAME)
             set(CUR_MODULE_OBJECT ${MODULE_OBJECT_OUTPUT_DIR}/${SRC_FILENAME}.obj)
+
             add_custom_command(
                     OUTPUT ${CUR_MODULE_PRECOMPILE} ${CUR_MODULE_OBJECT}
                     DEPENDS ${src} ${MODULE_PCM_FILES}
@@ -108,6 +107,7 @@ function(add_module name)
                     /ifcOutput${CUR_MODULE_PRECOMPILE}
                     /c /Fo${CUR_MODULE_OBJECT}
                     ${src})
+
             list(APPEND MODULE_PCM_FILES ${CUR_MODULE_PRECOMPILE})
             list(APPEND MODULE_OBJ_FILES ${CUR_MODULE_OBJECT})
 
@@ -120,33 +120,32 @@ function(add_module name)
     endforeach()
 
     foreach(src ${SRCS})
-        get_filename_component(SRC_STEM ${src} NAME_WLE)
         check_accepted_module_interface(IS_MODULE_INTERFACE ${src})
-        if(IS_MODULE_INTERFACE)
-            continue()
-        endif()
+        if(NOT IS_MODULE_INTERFACE)
+            get_filename_component(SRC_FILENAME ${src} NAME)
+            set(CUR_MODULE_OBJECT ${MODULE_OBJECT_OUTPUT_DIR}/${SRC_FILENAME}.obj)
 
-        get_filename_component(SRC_FILENAME ${src} NAME)
-        set(CUR_MODULE_OBJECT ${MODULE_OBJECT_OUTPUT_DIR}/${SRC_FILENAME}.obj)
-        add_custom_command(
-                OUTPUT ${CUR_MODULE_OBJECT}
-                DEPENDS ${src} ${MODULE_PCM_FILES}
-                #COMMAND
-                #if not exist ${PREBUILT_MODULE_PATH} md ${PREBUILT_MODULE_PATH}
-                COMMAND
-                ${CMAKE_CXX_COMPILER}
-                ${MODULE_FLAG}
-                /stdIfcDir${STDIFC_DIR}
-                /ifcSearchDir${PREBUILT_MODULE_PATH}
-                ${MODULE_FRAGMENT_REFERENCES}
-                /TP
-                /std:c++latest
-                /EHsc /nologo
-                ${LINK_MODE_FLAG}
-                /c /Fo${CUR_MODULE_OBJECT}
-                ${src}
-        )
-        list(APPEND MODULE_OBJ_FILES ${CUR_MODULE_OBJECT})
+            add_custom_command(
+                    OUTPUT ${CUR_MODULE_OBJECT}
+                    DEPENDS ${src} ${MODULE_PCM_FILES}
+                    #COMMAND
+                    #if not exist ${PREBUILT_MODULE_PATH} md ${PREBUILT_MODULE_PATH}
+                    COMMAND
+                    ${CMAKE_CXX_COMPILER}
+                    ${MODULE_FLAG}
+                    /stdIfcDir${STDIFC_DIR}
+                    /ifcSearchDir${PREBUILT_MODULE_PATH}
+                    ${MODULE_FRAGMENT_REFERENCES}
+                    /TP
+                    /std:c++latest
+                    /EHsc /nologo
+                    ${LINK_MODE_FLAG}
+                    /c /Fo${CUR_MODULE_OBJECT}
+                    ${src}
+            )
+
+            list(APPEND MODULE_OBJ_FILES ${CUR_MODULE_OBJECT})
+        endif()
 
     endforeach()
 
