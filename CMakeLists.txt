@@ -244,11 +244,11 @@ if(${COMPILER_SUPPORTS_MODULES})
 
     add_module(hello ${MODULE_SRCS_HELLO})
     add_module(foo ${MODULE_SRCS_FOO})
-    if(GNUC OR CLANG OR APPLECLANG)
-        add_module(math ${MODULE_SUBMODULES_SRCS_MATH})
-    elseif(MSVC)
+    if(MSVC)
         add_module(math ${MODULE_FRAGMENTS_SRCS_MATH}
                 FRAGMENTS ${MODULE_FRAGMENTS_SRCS_MATH_FRAGMENTS})
+    else()
+        add_module(math ${MODULE_SUBMODULES_SRCS_MATH})
     endif()
 endif()
 
