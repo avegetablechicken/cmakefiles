@@ -77,6 +77,11 @@ function(add_module name)
                 -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk)
     endif()
 
+    set(COMPILER_TARGET "")
+    if(DEFINED CMAKE_CXX_COMPILER_TARGET)
+        set(COMPILER_TARGET --target=${CMAKE_CXX_COMPILER_TARGET})
+    endif()
+
     get_module_compile_flag(MODULE_FLAG)
 
     set(SRCS "")
@@ -105,6 +110,7 @@ function(add_module name)
                     DEPENDS ${src} ${MODULE_PCM_FILES}
                     COMMAND
                     ${CMAKE_CXX_COMPILER}
+                    ${COMPILER_TARGET}
                     ${ISYSROOT}
                     ${MODULE_FLAG}
                     #-fimplicit-modules
@@ -143,6 +149,7 @@ function(add_module name)
                 DEPENDS ${INPUT_FILE} ${MODULE_PCM_FILES}
                 COMMAND
                 ${CMAKE_CXX_COMPILER}
+                ${COMPILER_TARGET}
                 ${ISYSROOT}
                 ${MODULE_FLAG}
                 #-fimplicit-modules
