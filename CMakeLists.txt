@@ -1,75 +1,109 @@
 cmake_minimum_required(VERSION 3.16)
 
 # -------------------------------- USER OPTIONS --------------------------------
-option(USE_HOMEBREW OFF "")
 option(USE_PKGCFG ON "")
+option(USE_HOMEBREW OFF "")
 option(USE_VCPKG OFF "")
+option(CLANG_USE_MINGW OFF "")
 
-if(WIN32)
-    if(MSVC_CL_64)
-        set(X86_64 TRUE)
-    else()
-        set(I386 TRUE)
-    endif()
-else()
-    execute_process(
-            COMMAND uname -m COMMAND tr -d '\n'
-            OUTPUT_VARIABLE ARCH)
-    if(x86_64 MATCHES ${ARCH} OR x64 MATCHES ${ARCH}
-            OR amd64 MATCHES ${ARCH})
-        set(X86_64 TRUE)
-    elseif(i386 MATCHES ${ARCH} OR i686 MATCHES ${ARCH}
-            OR x86 MATCHES ${ARCH})
-        set(I386 TRUE)
-    elseif(arm64 MATCHES ${ARCH})
-        set(ARM64 TRUE)
-    endif()
-    unset(ARCH)
-endif()
+set(HOMEBREW_PREFIX "$ENV{HOMEBREW_PREFIX}" CACHE PATH "Homebrew prefix")
+set(VCPKG_ROOT "$ENV{VCPKG_ROOT}" CACHE PATH "vcpkg root")
+set(VCPKG_TARGET_TRIPLET "$ENV{VCPKG_DEFAULT_TRIPLET}"
+        CACHE STRING "vcpkg target triplet")
+set(MINGW_BINDIR "" CACHE PATH "MinGW's bindir")
 
 if(USE_VCPKG)
-    if(X86_64)
-        set(VCPKG_TARGET_ARCH x64)
-    elseif(I386)
-        set(VCPKG_TARGET_ARCH x86)
-    elseif(ARM64)
-        set(VCPKG_TARGET_ARCH arm64)
-    endif()
+    if(NOT VCPKG_TARGET_TRIPLET)
+        if(WIN32)
+            execute_process(
+                    COMMAND cmd /c "echo %PROCESSOR_ARCHITECTURE%"
+                    OUTPUT_VARIABLE _PROCESSOR_ARCHITECTURE
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+        else()
+            execute_process(
+                    COMMAND uname -m
+                    OUTPUT_VARIABLE _PROCESSOR_ARCHITECTURE
+                    OUTPUT_STRIP_TRAILING_WHITESPACE)
+        endif()
+        STRING(TOLOWER ${_PROCESSOR_ARCHITECTURE} _PROCESSOR_ARCHITECTURE)
 
-    if(WIN32)
-        set(VCPKG_TARGET_TRIPLET "${VCPKG_TARGET_ARCH}-windows" CACHE STRING "")
-    elseif(APPLE)
-        set(VCPKG_TARGET_TRIPLET "${VCPKG_TARGET_ARCH}-osx-dynamic" CACHE STRING "")
-    else()
-        set(VCPKG_TARGET_TRIPLET "x${VCPKG_TARGET_ARCH}-linux-dynamic" CACHE STRING "")
+        if(x86_64 MATCHES ${_PROCESSOR_ARCHITECTURE}
+                OR x64 MATCHES ${_PROCESSOR_ARCHITECTURE}
+                OR amd64 MATCHES ${_PROCESSOR_ARCHITECTURE})
+            set(_VCPKG_TARGET_ARCH x64)
+        elseif(i386 MATCHES ${_PROCESSOR_ARCHITECTURE}
+                OR i686 MATCHES ${_PROCESSOR_ARCHITECTURE}
+                OR x86 MATCHES ${_PROCESSOR_ARCHITECTURE})
+            set(_VCPKG_TARGET_ARCH x86)
+        elseif(arm64 MATCHES ${_PROCESSOR_ARCHITECTURE})
+            set(_VCPKG_TARGET_ARCH arm64)
+        elseif(arm MATCHES ${_PROCESSOR_ARCHITECTURE})
+            set(_VCPKG_TARGET_ARCH arm)
+        else()
+            message(FATAL_ERROR "Unknown architecture: ${_PROCESSOR_ARCHITECTURE}")
+        endif()
+        unset(_PROCESSOR_ARCHITECTURE)
+
+        if(WIN32)
+            set(VCPKG_TARGET_TRIPLET "${_VCPKG_TARGET_ARCH}-windows" CACHE STRING "")
+        elseif(APPLE)
+            set(VCPKG_TARGET_TRIPLET "${_VCPKG_TARGET_ARCH}-osx-dynamic" CACHE STRING "")
+        else()
+            set(VCPKG_TARGET_TRIPLET "x${_VCPKG_TARGET_ARCH}-linux-dynamic" CACHE STRING "")
+        endif()
+        unset(_VCPKG_TARGET_ARCH)
     endif()
-    set(VCPKG_CRT_LINKAGE dynamic)
-    set(VCPKG_LIBRARY_LINKAGE dynamic)
 
     if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
-        set(CMAKE_TOOLCHAIN_FILE
-                ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
-        if(NOT EXISTS ${CMAKE_TOOLCHAIN_FILE})
-            set(CMAKE_TOOLCHAIN_FILE
-                    ${VCPKG_ROOT}/libexec/scripts/buildsystems/vcpkg.cmake)
+        if(NOT VCPKG_ROOT)
+            find_program(_VCPKG_PROGRAM vcpkg)
+            if(_VCPKG_PROGRAM)
+                get_filename_component(VCPKG_ROOT ${_VCPKG_PROGRAM} DIRECTORY)
+            else()
+                message(STATUS "vcpkg not found. vcpkg disabled.")
+            endif()
+            unset(_VCPKG_PROGRAM)
+        endif()
+
+        if(VCPKG_ROOT)
+            set(_VCPKG_TOOLCHAIN_FILE
+                    ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
+            if(EXISTS ${_VCPKG_TOOLCHAIN_FILE})
+                set(CMAKE_TOOLCHAIN_FILE ${_VCPKG_TOOLCHAIN_FILE})
+            else()
+                set(_VCPKG_TOOLCHAIN_FILE
+                        ${VCPKG_ROOT}/libexec/scripts/buildsystems/vcpkg.cmake)
+                if(EXISTS ${_VCPKG_TOOLCHAIN_FILE})
+                    set(CMAKE_TOOLCHAIN_FILE ${_VCPKG_TOOLCHAIN_FILE})
+                else()
+                    message(STATUS "VCPKG_ROOT is invalid. vcpkg disabled.")
+                endif()
+            endif()
+            unset(_VCPKG_TOOLCHAIN_FILE)
         endif()
     endif()
 endif()
 
 ## HomeBrew prefix
-if(USE_HOMEBREW)
-    if(APPLE)
-        if(X86_64)
-            set(BREW_HOME /usr/local
-                    CACHE PATH "HomeBrew's home path")
-        else()
-            set(BREW_HOME /opt/local
-                    CACHE PATH "HomeBrew's home path")
-        endif()
-    else()
-        set(BREW_HOME /home/linuxbrew/.linuxbrew
-                CACHE PATH "LinuxBrew's home path")
+if(USE_HOMEBREW AND NOT HOMEBREW_PREFIX)
+    find_program(_HOMEBREW_PROGRAM brew
+            PATHS /usr/local/bin /opt/local/bin
+            PATHS /home/linuxbrew/.linuxbrew/bin $ENV{HOME}/.linuxbrew/bin)
+    if(_HOMEBREW_PROGRAM)
+        get_filename_component(_HOMEBREW_PROGRAM_PARENT ${_HOMEBREW_PROGRAM} DIRECTORY)
+        get_filename_component(HOMEBREW_PREFIX ${_HOMEBREW_PROGRAM_PARENT} DIRECTORY)
+        unset(_HOMEBREW_PROGRAM_PARENT)
     endif()
+    unset(_HOMEBREW_PROGRAM)
+endif()
+
+## Clang with MinGW toolchain
+if(WIN32 AND CLANG_USE_MINGW)
+    set(CMAKE_C_COMPILER_TARGET x86_64-pc-mingw32)
+    set(CMAKE_CXX_COMPILER_TARGET x86_64-pc-mingw32)
+#    if(MINGW_BINDIR)
+#        set(ENV{Path} "${MINGW_BINDIR};$ENV{Path}")
+#    endif()
 endif()
 
 # ---------------------------------- PROJECT -----------------------------------
@@ -161,7 +195,7 @@ endif()
 set(CMAKE_MODULE_PATH
         ${CMAKE_CURRENT_SOURCE_DIR}/cmake ${CMAKE_MODULE_PATH})
 if(USE_HOMEBREW)
-    set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${BREW_HOME})
+    set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${HOMEBREW_PREFIX})
 endif()
 set(CMAKE_PREFIX_PATH ${THIRD_PARTY_LIB_DIR} ${CMAKE_PREFIX_PATH})
 
@@ -171,7 +205,7 @@ if(USE_PKGCFG)
     if(PkgConfig_FOUND)
         if(USE_HOMEBREW)
             set(ENV{PKG_CONFIG_PATH}
-                    ${BREW_HOME}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH})
+                    ${HOMEBREW_PREFIX}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH})
         endif()
         set(ENV{PKG_CONFIG_PATH}
                 ${THIRD_PARTY_LIB_DIR}/lib/pkgconfig:$ENV{PKG_CONFIG_PATH})
