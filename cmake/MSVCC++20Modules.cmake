@@ -44,12 +44,23 @@ function(add_module name)
             "${CMAKE_CXX_COMPILER}/../../../../ifc/x64")
     cmake_path(ABSOLUTE_PATH STDIFC_BASE_DIR NORMALIZE)
 
-    if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-        set(LINK_MODE_FLAG /MDd)
-        set(STDIFC_DIR "${STDIFC_BASE_DIR}/Debug")
-    else()
-        set(LINK_MODE_FLAG /MD)
+    string(REPLACE " " ";" CXXFLAGS ${CMAKE_CXX_FLAGS})
+    if(DEFINED CMAKE_BUILD_TYPE)
+        if (${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+            string(REPLACE " " ";" CXXFLAGS_DEBUG ${CMAKE_CXX_FLAGS_DEBUG})
+            list(APPEND CXXFLAGS ${CXXFLAGS_DEBUG})
+            list(APPEND CXXFLAGS "-MDd")
+            set(STDIFC_DIR "${STDIFC_BASE_DIR}/Debug")
+            set(_DEBUG 1)
+        endif()
+    endif()
+    if(NOT DEFINED _DEBUG)
+        string(REPLACE " " ";" CXXFLAGS_RELEASE ${CMAKE_CXX_FLAGS_RELEASE})
+        list(APPEND CXXFLAGS ${CXXFLAGS_RELEASE})
+        list(APPEND CXXFLAGS "-MD")
         set(STDIFC_DIR "${STDIFC_BASE_DIR}/Release")
+    else()
+        unset(_DEBUG)
     endif()
 
     set(SRCS "")
@@ -68,7 +79,12 @@ function(add_module name)
             list(APPEND SRCS ${src})
         endif()
     endforeach()
-    file(MAKE_DIRECTORY ${PREBUILT_MODULE_PATH})
+
+    string(REPLACE "/" "\\" CMD_PREBUILT_MODULE_PATH ${PREBUILT_MODULE_PATH})
+    add_custom_command(
+            OUTPUT ${PREBUILT_MODULE_PATH}
+            COMMAND md ${CMD_PREBUILT_MODULE_PATH}
+    )
 
     set(MODULE_OBJECT_OUTPUT_DIR ${CMAKE_BINARY_DIR}/CMakeFiles/${name}.dir)
     set(MODULE_PCM_FILES "")
@@ -90,20 +106,19 @@ function(add_module name)
 
             add_custom_command(
                     OUTPUT ${CUR_MODULE_PRECOMPILE} ${CUR_MODULE_OBJECT}
-                    DEPENDS ${src} ${MODULE_PCM_FILES}
-                    #COMMAND
-                    #if not exist ${PREBUILT_MODULE_PATH} md ${PREBUILT_MODULE_PATH}
+                    DEPENDS ${src} ${PREBUILT_MODULE_PATH} ${MODULE_PCM_FILES}
                     COMMAND
                     ${CMAKE_CXX_COMPILER}
+                    /interface
+                    /nologo
+                    /TP
+                    /std:c++latest
+                    ${CXXFLAGS}
+                    /utf-8
                     ${MODULE_FLAG}
                     /stdIfcDir${STDIFC_DIR}
                     /ifcSearchDir${PREBUILT_MODULE_PATH}
                     ${MODULE_FRAGMENT_REFERENCES}
-                    /interface
-                    /TP
-                    /std:c++latest
-                    /EHsc /nologo
-                    ${LINK_MODE_FLAG}
                     /ifcOutput${CUR_MODULE_PRECOMPILE}
                     /c /Fo${CUR_MODULE_OBJECT}
                     ${src})
@@ -127,19 +142,18 @@ function(add_module name)
 
             add_custom_command(
                     OUTPUT ${CUR_MODULE_OBJECT}
-                    DEPENDS ${src} ${MODULE_PCM_FILES}
-                    #COMMAND
-                    #if not exist ${PREBUILT_MODULE_PATH} md ${PREBUILT_MODULE_PATH}
+                    DEPENDS ${src} ${PREBUILT_MODULE_PATH} ${MODULE_PCM_FILES}
                     COMMAND
                     ${CMAKE_CXX_COMPILER}
+                    /nologo
+                    /TP
+                    /std:c++latest
+                    ${CXXFLAGS}
+                    /utf-8
                     ${MODULE_FLAG}
                     /stdIfcDir${STDIFC_DIR}
                     /ifcSearchDir${PREBUILT_MODULE_PATH}
                     ${MODULE_FRAGMENT_REFERENCES}
-                    /TP
-                    /std:c++latest
-                    /EHsc /nologo
-                    ${LINK_MODE_FLAG}
                     /c /Fo${CUR_MODULE_OBJECT}
                     ${src}
             )
