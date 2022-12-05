@@ -216,6 +216,7 @@ endif()
 # --------------------------------- LIBRARIES ----------------------------------
 ## search by cmake
 find_package(fmt REQUIRED)
+find_package(nlohmann_json REQUIRED QUIET)
 #find_package(Add MODULE REQUIRED)
 
 ## search by pkg-config
@@ -264,9 +265,9 @@ endif()
 # link libraries
 target_compile_options(tester PRIVATE ${PKG_CFLAGS})
 target_link_libraries(tester PRIVATE ${PKG_LDFLAGS})
-target_include_directories(tester PRIVATE ${EIGEN3_INCLUDE_DIR})
-target_link_libraries(tester PRIVATE fmt::fmt)
-if (Add_FOUND)
+#target_include_directories(tester PRIVATE ${EIGEN3_INCLUDE_DIR})
+target_link_libraries(tester PRIVATE fmt::fmt nlohmann_json::nlohmann_json)
+if(Add_FOUND)
     target_include_directories(tester PRIVATE ${Add_INCLUDE_DIRS})
     target_link_libraries(tester PRIVATE ${Add_LIBRARIES})
     target_compile_definitions(tester PRIVATE -DUSE_ADD)
